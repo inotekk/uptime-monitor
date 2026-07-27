@@ -20,7 +20,7 @@ export const getUptimeMonitorVersion = async () => {
   let latestRelease: string | undefined;
   try {
     const releases = await octokit.repos.listReleases({
-      owner: "upptime",
+      owner: "inotekk",
       repo: "uptime-monitor",
       per_page: 1,
     });
@@ -35,13 +35,13 @@ export const getUptimeMonitorVersion = async () => {
   }
 
   const tags = await octokit.repos.listTags({
-    owner: "upptime",
+    owner: "inotekk",
     repo: "uptime-monitor",
     per_page: 1,
   });
   const latestTag = tags.data[0]?.name;
   if (!latestTag) {
-    throw new Error("Unable to find a release or tag for upptime/uptime-monitor");
+    throw new Error("Unable to find a release or tag for inotekk/uptime-monitor");
   }
 
   release = latestTag;
@@ -97,7 +97,7 @@ jobs:
         with:
           node-version: "20"
       - name: Generate graphs
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "graphs"
         env:
@@ -139,7 +139,7 @@ jobs:
           ref: \${{ github.head_ref || github.ref_name }}
           token: \${{ secrets.GH_PAT || github.token }}
       - name: Update response time
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "response-time"
         env:
@@ -176,13 +176,13 @@ jobs:
           ref: \${{ github.head_ref || github.ref_name }}
           token: \${{ secrets.GH_PAT || github.token }}
       - name: Update template
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "update-template"
         env:
           GH_PAT: \${{ secrets.GH_PAT || github.token }}
       - name: Update response time
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "response-time"
         env:
@@ -190,7 +190,7 @@ jobs:
           # Configure the secret allowlist in .upptimerc.yml; do not edit this workflow directly.
           SECRETS_CONTEXT: ${renderSecretsContext(getWorkflowSecretNames(config))}
       - name: Update summary in README
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "readme"
         env:
@@ -209,13 +209,13 @@ jobs:
           node-version: "20"
       - name: Generate graphs directly if dispatch fails
         if: steps.dispatch_graphs.outcome == 'failure'
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "graphs"
         env:
           GH_PAT: \${{ secrets.GH_PAT || github.token }}
       - name: Generate site
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "site"
         env:
@@ -264,7 +264,7 @@ jobs:
           ref: \${{ github.head_ref || github.ref_name }}
           token: \${{ secrets.GH_PAT || github.token }}
       - name: Generate site
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "site"
         env:
@@ -307,7 +307,7 @@ jobs:
           ref: \${{ github.head_ref || github.ref_name }}
           token: \${{ secrets.GH_PAT || github.token }}
       - name: Update summary in README
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "readme"
         env:
@@ -340,7 +340,7 @@ jobs:
           ref: \${{ github.head_ref || github.ref_name }}
           token: \${{ secrets.GH_PAT || github.token }}
       - name: Update template
-        uses: upptime/uptime-monitor@master
+        uses: inotekk/uptime-monitor@master
         with:
           command: "update-template"
         env:
@@ -404,7 +404,7 @@ jobs:
           ref: \${{ github.head_ref || github.ref_name }}
           token: \${{ secrets.GH_PAT || github.token }}
       - name: Check endpoint status
-        uses: upptime/uptime-monitor@${await getUptimeMonitorVersion()}
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "update"
         env:
