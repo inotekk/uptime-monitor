@@ -26,11 +26,21 @@ const ssl_date_checker_1 = require("./ssl-date-checker");
 const summary_1 = require("./summary");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
+ * Renders an i18n template by substituting every $VARIABLE placeholder
+ * @param template - Template string containing $VARIABLE placeholders
+ * @param variables - Placeholder values, keyed without the $ prefix
+ * @returns Rendered template
+ */
+function renderI18nTemplate(template, variables) {
+    return Object.entries(variables).reduce((rendered, [key, value]) => rendered.split(`$${key}`).join(value), template);
+}
+/**
  * Get a human-readable time difference between from now
  * @param startTime - Starting time
+ * @param i18n - Optional translations for the duration unit labels
  * @returns Human-readable time difference, e.g. "2 days, 3 hours, 5 minutes"
  */
-function getHumanReadableTimeDifference(startTime) {
+function getHumanReadableTimeDifference(startTime, i18n = {}) {
     const diffDays = (0, dayjs_1.default)().diff((0, dayjs_1.default)(startTime), "day");
     const diffHours = (0, dayjs_1.default)().subtract(diffDays, "day").diff((0, dayjs_1.default)(startTime), "hour");
     const diffMinutes = (0, dayjs_1.default)()
@@ -39,11 +49,11 @@ function getHumanReadableTimeDifference(startTime) {
         .diff((0, dayjs_1.default)(startTime), "minute");
     const result = [];
     if (diffDays > 0)
-        result.push(`${diffDays.toLocaleString()} ${diffDays > 1 ? "days" : "day"}`);
+        result.push(`${diffDays.toLocaleString()} ${diffDays > 1 ? i18n?.durationDays || "days" : i18n?.durationDay || "day"}`);
     if (diffHours > 0)
-        result.push(`${diffHours.toLocaleString()} ${diffHours > 1 ? "hours" : "hour"}`);
+        result.push(`${diffHours.toLocaleString()} ${diffHours > 1 ? i18n?.durationHours || "hours" : i18n?.durationHour || "hour"}`);
     if (diffMinutes > 0)
-        result.push(`${diffMinutes.toLocaleString()} ${diffMinutes > 1 ? "minutes" : "minute"}`);
+        result.push(`${diffMinutes.toLocaleString()} ${diffMinutes > 1 ? i18n?.durationMinutes || "minutes" : i18n?.durationMinute || "minute"}`);
     return result.join(", ");
 }
 function sanitizeTcpPingResultForLog(tcpResult) {
@@ -569,13 +579,20 @@ generator: Upptime <https://github.com/upptime/upptime>
                             const newIssue = await octokit.issues.create({
                                 owner,
                                 repo,
-                                title: status === "down"
-                                    ? `🛑 ${site.name} is down`
-                                    : `⚠️ ${site.name} has degraded performance`,
-                                body: `In [\`${lastCommitSha.substr(0, 7)}\`](https://github.com/${owner}/${repo}/commit/${lastCommitSha}), ${site.name} (${site.url}) ${status === "down" ? "was **down**" : "experienced **degraded performance**"}:
-- HTTP code: ${result.httpCode}
-- Response time: ${responseTime} ms
-`,
+                                title: renderI18nTemplate(status === "down"
+                                    ? config.i18n?.issueTitleDown || "🛑 $SITE_NAME is down"
+                                    : config.i18n?.issueTitleDegraded || "⚠️ $SITE_NAME has degraded performance", { SITE_NAME: site.name }),
+                                body: renderI18nTemplate(status === "down"
+                                    ? config.i18n?.issueBodyDown ||
+                                        "In $COMMIT_LINK, $SITE_NAME ($SITE_URL) was **down**:\n- HTTP code: $HTTP_CODE\n- Response time: $RESPONSE_TIME ms\n"
+                                    : config.i18n?.issueBodyDegraded ||
+                                        "In $COMMIT_LINK, $SITE_NAME ($SITE_URL) experienced **degraded performance**:\n- HTTP code: $HTTP_CODE\n- Response time: $RESPONSE_TIME ms\n", {
+                                    COMMIT_LINK: `[\`${lastCommitSha.substr(0, 7)}\`](https://github.com/${owner}/${repo}/commit/${lastCommitSha})`,
+                                    SITE_NAME: site.name,
+                                    SITE_URL: site.url,
+                                    HTTP_CODE: result.httpCode.toString(),
+                                    RESPONSE_TIME: responseTime,
+                                }),
                                 labels: ["status", slug, ...(site.tags || [])],
                             });
                             const assignees = [...(config.assignees || []), ...(site.assignees || [])];
@@ -626,9 +643,19 @@ generator: Upptime <https://github.com/upptime/upptime>
                             owner,
                             repo,
                             issue_number: issues.data[0].number,
-                            body: `**Resolved:** ${site.name} ${issues.data[0].title.includes("degraded")
-                                ? "performance has improved"
-                                : "is back up"} in [\`${lastCommitSha.substr(0, 7)}\`](https://github.com/${owner}/${repo}/commit/${lastCommitSha}) after ${getHumanReadableTimeDifference(new Date(issues.data[0].created_at))}.`,
+                            // Detects degraded incidents whether the issue was titled with the
+                            // configured i18n template or with the legacy English default.
+                            body: renderI18nTemplate(issues.data[0].title.includes("degraded") ||
+                                issues.data[0].title ===
+                                    renderI18nTemplate(config.i18n?.issueTitleDegraded || "⚠️ $SITE_NAME has degraded performance", { SITE_NAME: site.name })
+                                ? config.i18n?.issueResolvedDegraded ||
+                                    "**Resolved:** $SITE_NAME performance has improved in $COMMIT_LINK after $DURATION."
+                                : config.i18n?.issueResolvedDown ||
+                                    "**Resolved:** $SITE_NAME is back up in $COMMIT_LINK after $DURATION.", {
+                                SITE_NAME: site.name,
+                                COMMIT_LINK: `[\`${lastCommitSha.substr(0, 7)}\`](https://github.com/${owner}/${repo}/commit/${lastCommitSha})`,
+                                DURATION: getHumanReadableTimeDifference(new Date(issues.data[0].created_at), config.i18n),
+                            }),
                         });
                         console.log("Created comment in issue");
                         await octokit.issues.update({

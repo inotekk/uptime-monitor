@@ -27,12 +27,12 @@ describe("workflow helpers", () => {
         });
         await expect(getUptimeMonitorVersion()).resolves.toBe("v1.41.2");
         expect(listReleases).toHaveBeenCalledWith({
-            owner: "upptime",
+            owner: "inotekk",
             repo: "uptime-monitor",
             per_page: 1,
         });
         expect(listTags).toHaveBeenCalledWith({
-            owner: "upptime",
+            owner: "inotekk",
             repo: "uptime-monitor",
             per_page: 1,
         });
@@ -46,7 +46,7 @@ describe("workflow helpers", () => {
         });
         await expect(getUptimeMonitorVersion()).resolves.toBe("v1.41.3");
         expect(listTags).toHaveBeenCalledWith({
-            owner: "upptime",
+            owner: "inotekk",
             repo: "uptime-monitor",
             per_page: 1,
         });
@@ -121,7 +121,7 @@ describe("workflow helpers", () => {
             }),
             expect.objectContaining({
                 name: "Generate graphs",
-                uses: "upptime/uptime-monitor@v1.41.9",
+                uses: "inotekk/uptime-monitor@v1.41.9",
                 with: { command: "graphs" },
             }),
         ]));
@@ -163,7 +163,7 @@ describe("workflow helpers", () => {
         });
         expect(fallbackStep).toMatchObject({
             if: "steps.dispatch_graphs.outcome == 'failure'",
-            uses: "upptime/uptime-monitor@v1.41.9",
+            uses: "inotekk/uptime-monitor@v1.41.9",
             with: {
                 command: "graphs",
             },
