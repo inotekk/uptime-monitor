@@ -1083,6 +1083,34 @@ exports.checkOverlap = checkOverlap;
 
 /***/ }),
 
+/***/ 38999:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getPackageName = void 0;
+/**
+ * Return the node_modules directory name for an npm package specification.
+ *
+ * Named GitHub specifications such as
+ * `@upptime/status-page@github:inotekk/status-page#v1.17.0-fr.1` keep the
+ * package installed under `node_modules/@upptime/status-page`.
+ */
+const getPackageName = (packageSpec) => {
+    const scopedPackage = packageSpec.match(/^(@[^/]+\/[^@]+)(?:@.+)?$/);
+    if (scopedPackage)
+        return scopedPackage[1];
+    const unscopedPackage = packageSpec.match(/^([^@:/\s]+)(?:@.+)?$/);
+    if (unscopedPackage)
+        return unscopedPackage[1];
+    throw new Error(`Unable to determine package name from "${packageSpec}". Use a named npm specification.`);
+};
+exports.getPackageName = getPackageName;
+//# sourceMappingURL=package-spec.js.map
+
+/***/ }),
+
 /***/ 86692:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -2033,6 +2061,7 @@ const shelljs_1 = __nccwpck_require__(33516);
 const config_1 = __nccwpck_require__(99153);
 const github_1 = __nccwpck_require__(38066);
 const init_check_1 = __nccwpck_require__(34689);
+const package_spec_1 = __nccwpck_require__(38999);
 const secrets_1 = __nccwpck_require__(10020);
 const generateSite = async () => {
     if (!(await (0, init_check_1.shouldContinue)()))
@@ -2042,6 +2071,7 @@ const generateSite = async () => {
     if (config.skipGeneratingWebsite)
         return;
     const sitePackage = config.customStatusWebsitePackage || "@upptime/status-page";
+    const sitePackageName = (0, package_spec_1.getPackageName)(sitePackage);
     const octokit = await (0, github_1.getOctokit)();
     const repoDetails = await octokit.repos.get({ owner, repo });
     const siteDir = "site";
@@ -2063,7 +2093,7 @@ const generateSite = async () => {
     (0, shelljs_1.exec)("npm init -y");
     config.repo;
     (0, shelljs_1.exec)(`npm i ${sitePackage} --no-audit --no-fund --loglevel=error`);
-    (0, shelljs_1.cp)("-r", `node_modules/${sitePackage}/*`, ".");
+    (0, shelljs_1.cp)("-r", `node_modules/${sitePackageName}/*`, ".");
     (0, shelljs_1.exec)("npm i --no-audit --no-fund --loglevel=error");
     (0, shelljs_1.exec)("npm run export");
     (0, shelljs_1.mkdir)("-p", "status-page/__sapper__/export");

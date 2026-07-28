@@ -3,6 +3,7 @@ import { cd, cp, exec, mkdir } from "shelljs";
 import { getConfig } from "./helpers/config";
 import { getOctokit } from "./helpers/github";
 import { shouldContinue } from "./helpers/init-check";
+import { getPackageName } from "./helpers/package-spec";
 import { getOwnerRepo } from "./helpers/secrets";
 
 export const generateSite = async () => {
@@ -11,6 +12,7 @@ export const generateSite = async () => {
   const config = await getConfig();
   if (config.skipGeneratingWebsite) return;
   const sitePackage = config.customStatusWebsitePackage || "@upptime/status-page";
+  const sitePackageName = getPackageName(sitePackage);
   const octokit = await getOctokit();
   const repoDetails = await octokit.repos.get({ owner, repo });
   const siteDir = "site";
@@ -34,7 +36,7 @@ export const generateSite = async () => {
   exec("npm init -y");
   config.repo;
   exec(`npm i ${sitePackage} --no-audit --no-fund --loglevel=error`);
-  cp("-r", `node_modules/${sitePackage}/*`, ".");
+  cp("-r", `node_modules/${sitePackageName}/*`, ".");
   exec("npm i --no-audit --no-fund --loglevel=error");
   exec("npm run export");
   mkdir("-p", "status-page/__sapper__/export");

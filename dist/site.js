@@ -6,6 +6,7 @@ const shelljs_1 = require("shelljs");
 const config_1 = require("./helpers/config");
 const github_1 = require("./helpers/github");
 const init_check_1 = require("./helpers/init-check");
+const package_spec_1 = require("./helpers/package-spec");
 const secrets_1 = require("./helpers/secrets");
 const generateSite = async () => {
     if (!(await (0, init_check_1.shouldContinue)()))
@@ -15,6 +16,7 @@ const generateSite = async () => {
     if (config.skipGeneratingWebsite)
         return;
     const sitePackage = config.customStatusWebsitePackage || "@upptime/status-page";
+    const sitePackageName = (0, package_spec_1.getPackageName)(sitePackage);
     const octokit = await (0, github_1.getOctokit)();
     const repoDetails = await octokit.repos.get({ owner, repo });
     const siteDir = "site";
@@ -36,7 +38,7 @@ const generateSite = async () => {
     (0, shelljs_1.exec)("npm init -y");
     config.repo;
     (0, shelljs_1.exec)(`npm i ${sitePackage} --no-audit --no-fund --loglevel=error`);
-    (0, shelljs_1.cp)("-r", `node_modules/${sitePackage}/*`, ".");
+    (0, shelljs_1.cp)("-r", `node_modules/${sitePackageName}/*`, ".");
     (0, shelljs_1.exec)("npm i --no-audit --no-fund --loglevel=error");
     (0, shelljs_1.exec)("npm run export");
     (0, shelljs_1.mkdir)("-p", "status-page/__sapper__/export");

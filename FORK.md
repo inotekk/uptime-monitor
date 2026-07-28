@@ -19,6 +19,11 @@ Fork minimal maintenu par Inotekk pour la page de statut `inotekk/status`
    de version et les `uses:` des workflows générés pointent vers
    `inotekk/uptime-monitor` au lieu d'`upptime/uptime-monitor`, afin que
    l'Update Template CI du repo status ne rebascule pas vers upstream.
+3. **Paquets de page de statut Git nommés** (`src/site.ts`) : le générateur
+   distingue la spécification d'installation npm du chemin du paquet dans
+   `node_modules`. La page VIGIAO peut ainsi épingler le fork
+   `inotekk/status-page` avec une spécification de type
+   `@upptime/status-page@github:inotekk/status-page#<tag>`.
 
 ## Resynchronisation avec upstream
 
