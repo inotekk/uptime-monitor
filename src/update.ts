@@ -592,6 +592,20 @@ export const update = async (shouldCommit = false) => {
       }
     }
 
+    // A maintenance declaration is the source of truth for expected service
+    // impact. Keep probing for operational visibility, but do not persist an
+    // expected down/degraded sample: history commits feed the public SLA and a
+    // planned maintenance window must therefore be excluded, not merely muted.
+    const expectedMaintenance =
+      (status === "down" &&
+        ongoingMaintenanceEvents.some((event) => event.metadata.expectedDown.includes(slug))) ||
+      (status === "degraded" &&
+        ongoingMaintenanceEvents.some((event) => event.metadata.expectedDegraded.includes(slug)));
+    if (expectedMaintenance) {
+      console.log(`Ignoring expected ${status} sample for ${slug} during scheduled maintenance`);
+      continue;
+    }
+
     try {
       if (shouldCommit || currentStatus !== status) {
         await writeFile(

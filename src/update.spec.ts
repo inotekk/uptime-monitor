@@ -47,6 +47,10 @@ jest.mock("./helpers/ping", () => ({
   ping: jest.fn(),
 }));
 
+jest.mock("./helpers/request", () => ({
+  curl: jest.fn(),
+}));
+
 jest.mock("./summary", () => ({
   generateSummary: jest.fn(),
 }));
@@ -423,7 +427,20 @@ describe("update globalping handling", () => {
     );
   });
 
-  it("does not open an incident for expected degraded maintenance", async () => {
+  it("excludes expected maintenance downtime from incidents and SLA history", async () => {
+    mkdirSync(join(testCwd, "history"));
+    const historyPath = join(testCwd, "history", "slow-site.yml");
+    const previousHistory = [
+      "url: https://example.com",
+      "status: up",
+      "code: 200",
+      "responseTime: 42",
+      "lastUpdated: 2026-01-01T00:00:00.000Z",
+      "startTime: 2026-01-01T00:00:00.000Z",
+      "generator: Upptime <https://github.com/upptime/upptime>",
+      "",
+    ].join("\n");
+    writeFileSync(historyPath, previousHistory);
     (getConfig as jest.Mock).mockResolvedValue({
       owner: "owner",
       repo: "repo",
@@ -432,7 +449,6 @@ describe("update globalping handling", () => {
           name: "Slow Site",
           url: "https://example.com",
           type: "globalping",
-          maxResponseTime: 50,
         },
       ],
       assignees: [],
@@ -448,7 +464,7 @@ describe("update globalping handling", () => {
               "<!--",
               "start: 2000-01-01T00:00:00.000Z",
               "end: 2999-01-01T00:00:00.000Z",
-              "expectedDegraded: slow-site",
+              "expectedDown: slow-site",
               "-->",
             ].join("\n"),
           },
@@ -465,7 +481,7 @@ describe("update globalping handling", () => {
         results: [
           {
             result: {
-              statusCode: 200,
+              statusCode: 503,
               timings: { total: 123 },
               rawBody: "",
             },
@@ -476,10 +492,9 @@ describe("update globalping handling", () => {
 
     await update(true);
 
-    const history = readFileSync(join(testCwd, "history", "slow-site.yml"), "utf8");
-    expect(history).toContain("status: degraded");
-    expect(history).toContain("responseTime: 123");
+    expect(readFileSync(historyPath, "utf8")).toBe(previousHistory);
     expect(issueApi.create).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
   }, 15000);
 
   it("only closes Upptime-created status incidents for a recovered site", async () => {
