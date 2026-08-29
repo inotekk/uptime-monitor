@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "package": "ncc build --source-map",
+    "package": "ncc build --source-map && node scripts/fix-node-libcurl-path.js",
     "test": "jest"
   },
   "repository": {

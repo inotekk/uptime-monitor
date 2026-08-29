@@ -359766,7 +359766,7 @@ module.exports = Queue;
 /***/ 43448:
 /***/ ((module) => {
 
-module.exports = eval("require")("../lib/binding/node_libcurl.node");
+module.exports = eval("require")("./lib/binding/node_libcurl.node");
 
 
 /***/ }),
