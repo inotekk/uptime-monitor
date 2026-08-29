@@ -145,7 +145,13 @@ const update = async (shouldCommit = false) => {
     for await (const incident of _ongoingMaintenanceEvents.data) {
         const metadata = {};
         if (incident.body && incident.body.includes("<!--")) {
-            const summary = incident.body.split("<!--")[1].split("-->")[0];
+            // Accept both real line breaks and the literal `\\n` form sometimes
+            // produced by CLI/API callers. A visually valid maintenance issue must not
+            // silently lose its machine-readable protection because of serialization.
+            const summary = incident.body
+                .split("<!--")[1]
+                .split("-->")[0]
+                .replace(/\\r\\n|\\n/g, "\n");
             const lines = summary
                 .split("\n")
                 .filter((i) => i.trim())
