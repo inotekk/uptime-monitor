@@ -50,8 +50,10 @@ describe("calculate uptime", () => {
 
   it("counts overlapping downtime incidents only once", async () => {
     const { getOctokit, getOwnerRepo, getUptimePercentForSite } = loadCalculateUptimeHelpers();
-    const listForRepo = jest.fn().mockResolvedValue({
-      data: [
+    const listForRepo = jest
+      .fn()
+      .mockResolvedValueOnce({
+        data: [
         {
           created_at: "2026-03-26T00:00:00Z",
           closed_at: "2026-03-26T02:00:00Z",
@@ -60,8 +62,9 @@ describe("calculate uptime", () => {
           created_at: "2026-03-26T01:00:00Z",
           closed_at: "2026-03-26T03:00:00Z",
         },
-      ],
-    });
+        ],
+      })
+      .mockResolvedValueOnce({ data: [] });
 
     (getOwnerRepo as jest.Mock).mockReturnValue(["owner", "repo"]);
     (getOctokit as jest.Mock).mockResolvedValue({
@@ -80,5 +83,48 @@ describe("calculate uptime", () => {
       state: "all",
       per_page: 100,
     });
+    expect(listForRepo).toHaveBeenCalledWith({
+      owner: "owner",
+      repo: "repo",
+      labels: "maintenance",
+      filter: "all",
+      state: "all",
+      per_page: 100,
+    });
+  });
+
+  it("excludes only the overlap covered by a declared maintenance window", async () => {
+    const { getOctokit, getOwnerRepo, getUptimePercentForSite } = loadCalculateUptimeHelpers();
+    const listForRepo = jest
+      .fn()
+      .mockResolvedValueOnce({
+        data: [
+          {
+            created_at: "2026-03-26T00:00:00Z",
+            closed_at: "2026-03-26T03:00:00Z",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            body: [
+              "<!--",
+              "start: 2026-03-26T01:00:00Z",
+              "end: 2026-03-26T02:00:00Z",
+              "expectedDown: example",
+              "-->",
+            ].join("\\n"),
+          },
+        ],
+      });
+
+    (getOwnerRepo as jest.Mock).mockReturnValue(["owner", "repo"]);
+    (getOctokit as jest.Mock).mockResolvedValue({ issues: { listForRepo } });
+
+    const uptime = await getUptimePercentForSite("example");
+
+    expect(uptime.day).toBe("91.67%");
+    expect(uptime.dailyMinutesDown["2026-03-26"]).toBe(120);
   });
 });

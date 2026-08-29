@@ -241,6 +241,7 @@ const fs_extra_1 = __nccwpck_require__(5630);
 const js_yaml_1 = __nccwpck_require__(21917);
 const path_1 = __nccwpck_require__(71017);
 const github_1 = __nccwpck_require__(38066);
+const maintenance_1 = __nccwpck_require__(21032);
 const overlap_1 = __nccwpck_require__(96530);
 const secrets_1 = __nccwpck_require__(10020);
 const mergeOverlappingDowntimeRanges = (ranges) => {
@@ -258,6 +259,26 @@ const mergeOverlappingDowntimeRanges = (ranges) => {
         return merged;
     }, []);
 };
+/** Remove maintenance-covered intervals from measured downtime ranges. */
+const subtractRanges = (ranges, exclusions) => {
+    const mergedExclusions = mergeOverlappingDowntimeRanges(exclusions);
+    return mergeOverlappingDowntimeRanges(ranges).flatMap((range) => {
+        let remaining = [{ ...range }];
+        mergedExclusions.forEach((exclusion) => {
+            remaining = remaining.flatMap((candidate) => {
+                if (exclusion.end <= candidate.start || exclusion.start >= candidate.end)
+                    return [candidate];
+                const fragments = [];
+                if (exclusion.start > candidate.start)
+                    fragments.push({ start: candidate.start, end: Math.min(exclusion.start, candidate.end) });
+                if (exclusion.end < candidate.end)
+                    fragments.push({ start: Math.max(exclusion.end, candidate.start), end: candidate.end });
+                return fragments;
+            });
+        });
+        return remaining;
+    });
+};
 /**
  * Get the number of seconds a website has been down
  * @param slug - Slug of the site
@@ -272,19 +293,36 @@ const getDowntimeSecondsForSite = async (slug) => {
     let all = 0;
     const dailyMinutesDown = {};
     // Get all the issues for this website
-    const { data } = await octokit.issues.listForRepo({
-        owner,
-        repo,
-        labels: `status,${slug}`,
-        filter: "all",
-        state: "all",
-        per_page: 100,
-    });
+    const [{ data }, { data: maintenanceIssues }] = await Promise.all([
+        octokit.issues.listForRepo({
+            owner,
+            repo,
+            labels: `status,${slug}`,
+            filter: "all",
+            state: "all",
+            per_page: 100,
+        }),
+        octokit.issues.listForRepo({
+            owner,
+            repo,
+            labels: "maintenance",
+            filter: "all",
+            state: "all",
+            per_page: 100,
+        }),
+    ]);
     const now = new Date();
-    const downtimeRanges = mergeOverlappingDowntimeRanges(data.map((issue) => ({
+    const maintenanceRanges = maintenanceIssues.flatMap((issue) => {
+        const window = (0, maintenance_1.parseMaintenanceWindow)(issue.body);
+        if (!window ||
+            (!window.expectedDown.includes(slug) && !window.expectedDegraded.includes(slug)))
+            return [];
+        return [{ start: new Date(window.start).getTime(), end: new Date(window.end).getTime() }];
+    });
+    const downtimeRanges = subtractRanges(data.map((issue) => ({
         start: new Date(issue.created_at).getTime(),
         end: new Date(issue.closed_at || now).getTime(),
-    })));
+    })), maintenanceRanges);
     // If an incident overlaps another one for the same site, count that
     // downtime only once. Multiple open issues can describe the same outage.
     downtimeRanges.forEach((downtimeRange) => {
@@ -589,6 +627,52 @@ const shouldContinue = async () => {
 };
 exports.shouldContinue = shouldContinue;
 //# sourceMappingURL=init-check.js.map
+
+/***/ }),
+
+/***/ 21032:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.parseMaintenanceWindow = void 0;
+/** Parse and validate the hidden metadata carried by a maintenance issue. */
+const parseMaintenanceWindow = (body) => {
+    if (!body || !body.includes("<!--") || !body.includes("-->"))
+        return null;
+    // CLI/API callers sometimes serialize line breaks as literal `\n` text.
+    const summary = body
+        .split("<!--")[1]
+        .split("-->")[0]
+        .replace(/\\r\\n|\\n/g, "\n");
+    const metadata = {};
+    summary
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .forEach((line) => {
+        const separator = line.indexOf(":");
+        if (separator > 0)
+            metadata[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+    });
+    const start = new Date(metadata.start || "").getTime();
+    const end = new Date(metadata.end || "").getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
+        return null;
+    const list = (value = "") => value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    return {
+        start: metadata.start,
+        end: metadata.end,
+        expectedDown: list(metadata.expectedDown),
+        expectedDegraded: list(metadata.expectedDegraded),
+    };
+};
+exports.parseMaintenanceWindow = parseMaintenanceWindow;
+//# sourceMappingURL=maintenance.js.map
 
 /***/ }),
 
@@ -2572,6 +2656,7 @@ const environment_1 = __nccwpck_require__(69993);
 const git_1 = __nccwpck_require__(480);
 const github_1 = __nccwpck_require__(38066);
 const init_check_1 = __nccwpck_require__(34689);
+const maintenance_1 = __nccwpck_require__(21032);
 const notifme_1 = __nccwpck_require__(25974);
 const ping_1 = __nccwpck_require__(86692);
 const request_1 = __nccwpck_require__(44439);
@@ -2698,36 +2783,8 @@ const update = async (shouldCommit = false) => {
     console.log("Found ongoing maintenance events", _ongoingMaintenanceEvents.data.length);
     const ongoingMaintenanceEvents = [];
     for await (const incident of _ongoingMaintenanceEvents.data) {
-        const metadata = {};
-        if (incident.body && incident.body.includes("<!--")) {
-            // Accept both real line breaks and the literal `\\n` form sometimes
-            // produced by CLI/API callers. A visually valid maintenance issue must not
-            // silently lose its machine-readable protection because of serialization.
-            const summary = incident.body
-                .split("<!--")[1]
-                .split("-->")[0]
-                .replace(/\\r\\n|\\n/g, "\n");
-            const lines = summary
-                .split("\n")
-                .filter((i) => i.trim())
-                .filter((i) => i.includes(":"));
-            lines.forEach((i) => {
-                metadata[i.split(/:(.+)/)[0].trim()] = i.split(/:(.+)/)[1].trim();
-            });
-        }
-        if (metadata.start && metadata.end) {
-            let expectedDown = [];
-            let expectedDegraded = [];
-            if (metadata.expectedDown)
-                expectedDown = metadata.expectedDown
-                    .split(",")
-                    .map((i) => i.trim())
-                    .filter((i) => i.length);
-            if (metadata.expectedDegraded)
-                expectedDegraded = metadata.expectedDegraded
-                    .split(",")
-                    .map((i) => i.trim())
-                    .filter((i) => i.length);
+        const metadata = (0, maintenance_1.parseMaintenanceWindow)(incident.body);
+        if (metadata) {
             if ((0, dayjs_1.default)(metadata.end).isBefore((0, dayjs_1.default)())) {
                 await octokit.issues.unlock({
                     owner,
@@ -2750,7 +2807,7 @@ const update = async (shouldCommit = false) => {
             else if ((0, dayjs_1.default)(metadata.start).isBefore((0, dayjs_1.default)())) {
                 ongoingMaintenanceEvents.push({
                     issueNumber: incident.number,
-                    metadata: { start: metadata.start, end: metadata.end, expectedDegraded, expectedDown },
+                    metadata,
                 });
             }
         }

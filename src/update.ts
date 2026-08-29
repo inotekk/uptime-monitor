@@ -18,6 +18,7 @@ import { replaceEnvironmentVariables } from "./helpers/environment";
 import { commit, lastCommit, push } from "./helpers/git";
 import { getOctokit, retryTransientGitHubRequest } from "./helpers/github";
 import { shouldContinue } from "./helpers/init-check";
+import { parseMaintenanceWindow } from "./helpers/maintenance";
 import { sendNotification } from "./helpers/notifme";
 import { ping } from "./helpers/ping";
 import { curl } from "./helpers/request";
@@ -197,37 +198,8 @@ export const update = async (shouldCommit = false) => {
     metadata: { start: string; end: string; expectedDown: string[]; expectedDegraded: string[] };
   }[] = [];
   for await (const incident of _ongoingMaintenanceEvents.data) {
-    const metadata: Record<string, string> = {};
-    if (incident.body && incident.body.includes("<!--")) {
-      // Accept both real line breaks and the literal `\\n` form sometimes
-      // produced by CLI/API callers. A visually valid maintenance issue must not
-      // silently lose its machine-readable protection because of serialization.
-      const summary = incident.body
-        .split("<!--")[1]
-        .split("-->")[0]
-        .replace(/\\r\\n|\\n/g, "\n");
-      const lines = summary
-        .split("\n")
-        .filter((i) => i.trim())
-        .filter((i) => i.includes(":"));
-      lines.forEach((i) => {
-        metadata[i.split(/:(.+)/)[0].trim()] = i.split(/:(.+)/)[1].trim();
-      });
-    }
-    if (metadata.start && metadata.end) {
-      let expectedDown: string[] = [];
-      let expectedDegraded: string[] = [];
-      if (metadata.expectedDown)
-        expectedDown = metadata.expectedDown
-          .split(",")
-          .map((i) => i.trim())
-          .filter((i) => i.length);
-      if (metadata.expectedDegraded)
-        expectedDegraded = metadata.expectedDegraded
-          .split(",")
-          .map((i) => i.trim())
-          .filter((i) => i.length);
-
+    const metadata = parseMaintenanceWindow(incident.body);
+    if (metadata) {
       if (dayjs(metadata.end).isBefore(dayjs())) {
         await octokit.issues.unlock({
           owner,
@@ -249,7 +221,7 @@ export const update = async (shouldCommit = false) => {
       } else if (dayjs(metadata.start).isBefore(dayjs())) {
         ongoingMaintenanceEvents.push({
           issueNumber: incident.number,
-          metadata: { start: metadata.start, end: metadata.end, expectedDegraded, expectedDown },
+          metadata,
         });
       }
     }

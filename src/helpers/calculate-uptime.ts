@@ -4,6 +4,7 @@ import { load } from "js-yaml";
 import { join } from "path";
 import { DownPecentages, Downtimes, SiteHistory } from "../interfaces";
 import { getOctokit } from "./github";
+import { parseMaintenanceWindow } from "./maintenance";
 import { checkOverlap } from "./overlap";
 import { getOwnerRepo } from "./secrets";
 
@@ -30,6 +31,29 @@ const mergeOverlappingDowntimeRanges = (ranges: DowntimeRange[]): DowntimeRange[
   }, [] as DowntimeRange[]);
 };
 
+/** Remove maintenance-covered intervals from measured downtime ranges. */
+const subtractRanges = (
+  ranges: DowntimeRange[],
+  exclusions: DowntimeRange[]
+): DowntimeRange[] => {
+  const mergedExclusions = mergeOverlappingDowntimeRanges(exclusions);
+  return mergeOverlappingDowntimeRanges(ranges).flatMap((range) => {
+    let remaining = [{ ...range }];
+    mergedExclusions.forEach((exclusion) => {
+      remaining = remaining.flatMap((candidate) => {
+        if (exclusion.end <= candidate.start || exclusion.start >= candidate.end) return [candidate];
+        const fragments: DowntimeRange[] = [];
+        if (exclusion.start > candidate.start)
+          fragments.push({ start: candidate.start, end: Math.min(exclusion.start, candidate.end) });
+        if (exclusion.end < candidate.end)
+          fragments.push({ start: Math.max(exclusion.end, candidate.start), end: candidate.end });
+        return fragments;
+      });
+    });
+    return remaining;
+  });
+};
+
 /**
  * Get the number of seconds a website has been down
  * @param slug - Slug of the site
@@ -45,21 +69,41 @@ const getDowntimeSecondsForSite = async (slug: string): Promise<Downtimes> => {
   const dailyMinutesDown: Record<string, number> = {};
 
   // Get all the issues for this website
-  const { data } = await octokit.issues.listForRepo({
-    owner,
-    repo,
-    labels: `status,${slug}`,
-    filter: "all",
-    state: "all",
-    per_page: 100,
-  });
+  const [{ data }, { data: maintenanceIssues }] = await Promise.all([
+    octokit.issues.listForRepo({
+      owner,
+      repo,
+      labels: `status,${slug}`,
+      filter: "all",
+      state: "all",
+      per_page: 100,
+    }),
+    octokit.issues.listForRepo({
+      owner,
+      repo,
+      labels: "maintenance",
+      filter: "all",
+      state: "all",
+      per_page: 100,
+    }),
+  ]);
 
   const now = new Date();
-  const downtimeRanges = mergeOverlappingDowntimeRanges(
+  const maintenanceRanges = maintenanceIssues.flatMap((issue) => {
+    const window = parseMaintenanceWindow(issue.body);
+    if (
+      !window ||
+      (!window.expectedDown.includes(slug) && !window.expectedDegraded.includes(slug))
+    )
+      return [];
+    return [{ start: new Date(window.start).getTime(), end: new Date(window.end).getTime() }];
+  });
+  const downtimeRanges = subtractRanges(
     data.map((issue) => ({
       start: new Date(issue.created_at).getTime(),
       end: new Date(issue.closed_at || now).getTime(),
-    }))
+    })),
+    maintenanceRanges
   );
 
   // If an incident overlaps another one for the same site, count that
