@@ -98,6 +98,8 @@ describe("workflow helpers", () => {
       expect(workflow).not.toContain("actions/checkout@v5");
       expect(workflow).not.toContain("actions/checkout@v4");
     }
+    expect(workflows[5]).toContain("uses: inotekk/uptime-monitor@v1.41.4");
+    expect(workflows[5]).not.toContain("uses: inotekk/uptime-monitor@master");
     expect(listTags).not.toHaveBeenCalled();
   });
 

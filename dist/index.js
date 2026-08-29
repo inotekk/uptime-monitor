@@ -1990,7 +1990,7 @@ jobs:
           ref: \${{ github.head_ref || github.ref_name }}
           token: \${{ secrets.GH_PAT || github.token }}
       - name: Update template
-        uses: inotekk/uptime-monitor@master
+        uses: inotekk/uptime-monitor@${await getUptimeMonitorVersion()}
         with:
           command: "update-template"
         env:
